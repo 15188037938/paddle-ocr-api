@@ -1,0 +1,44 @@
+name: 构建 Windows EXE
+
+on:
+  workflow_dispatch:      # 手动触发
+    inputs:
+      version:
+        description: '版本号'
+        default: 'v1.0.0'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install paddlepaddle paddleocr==2.10.0 uvicorn fastapi requests python-multipart
+
+      - name: 编译 EXE
+        run: |
+          pyinstaller --onefile `
+            --name paddle-ocr-api `
+            --add-data "ocr_api.py;." `
+            --hidden-import uvicorn.logging `
+            --hidden-import uvicorn.loops.auto `
+            --hidden-import uvicorn.protocols.http.auto `
+            --hidden-import multipart `
+            --collect-all paddleocr `
+            ocr_api.py
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: paddle-ocr-api-${{ github.event.inputs.version || 'latest' }}-exe
+          path: dist/paddle-ocr-api.exe
