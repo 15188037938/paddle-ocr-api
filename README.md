@@ -2,6 +2,8 @@
 
 基于百度飞桨 PaddleOCR 的文字识别 API 服务，支持通过 HTTP 接口远程调用，可部署在云服务器上实现 7×24 小时在线服务。
 
+📦 **预编译版本下载：** [Releases 页面](https://github.com/15188037938/paddle-ocr-api/releases)（Windows EXE / Linux 二进制 / GUI 工具）
+
 ---
 
 ## 一、功能简介

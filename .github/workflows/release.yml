@@ -1,0 +1,192 @@
+name: 构建发布版本
+
+on:
+  workflow_dispatch:           # 手动触发
+    inputs:
+      version:
+        description: '版本号'
+        default: 'v2.1.0'
+  push:
+    tags:                      # 推送标签时自动发布
+      - 'v*'
+
+env:
+  APP_NAME: paddle-ocr-api
+  VERSION: ${{ github.event.inputs.version || github.ref_name || 'latest' }}
+
+jobs:
+  # ============================================================
+  # Windows: API 服务端
+  # ============================================================
+  build-windows-server:
+    name: 构建 Windows 服务端
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install paddlepaddle paddleocr==2.10.0 uvicorn fastapi requests python-multipart
+
+      - name: 编译 EXE
+        run: |
+          pyinstaller --onefile `
+            --name ${{ env.APP_NAME }} `
+            --hidden-import uvicorn.logging `
+            --hidden-import uvicorn.loops.auto `
+            --hidden-import uvicorn.protocols.http.auto `
+            --hidden-import multipart `
+            --collect-all paddleocr `
+            ocr_api.py
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-${{ env.VERSION }}-windows
+          path: dist/${{ env.APP_NAME }}.exe
+
+  # ============================================================
+  # Windows: GUI 可视化工具（轻量，不含 Paddle）
+  # ============================================================
+  build-windows-gui:
+    name: 构建 Windows 可视化工具
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller Pillow requests
+
+      - name: 编译 GUI EXE
+        run: |
+          pyinstaller --onefile `
+            --name "PaddleOCR可视化工具" `
+            --hidden-import PIL._tkinter_finder `
+            --hidden-import tkinter `
+            --hidden-import tkinter.ttk `
+            --hidden-import tkinter.filedialog `
+            --hidden-import tkinter.messagebox `
+            --add-data "ocr_api.py;." `
+            "PaddleOCR可视化工具.pyw"
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: PaddleOCR可视化工具-${{ env.VERSION }}-windows
+          path: dist/PaddleOCR可视化工具.exe
+
+  # ============================================================
+  # Linux: API 服务端
+  # ============================================================
+  build-linux:
+    name: 构建 Linux 服务端
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libgl1-mesa-glx libglib2.0-0  # OpenCV 所需
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install paddlepaddle paddleocr==2.10.0 uvicorn fastapi requests python-multipart
+
+      - name: 编译 Linux 二进制
+        run: |
+          pyinstaller --onefile \
+            --name ${{ env.APP_NAME }}-linux \
+            --hidden-import uvicorn.logging \
+            --hidden-import uvicorn.loops.auto \
+            --hidden-import uvicorn.protocols.http.auto \
+            --hidden-import multipart \
+            --collect-all paddleocr \
+            ocr_api.py
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-${{ env.VERSION }}-linux
+          path: dist/${{ env.APP_NAME }}-linux
+
+  # ============================================================
+  # 发布 Release（仅当推送 tag 时执行）
+  # ============================================================
+  release:
+    name: 发布 Release
+    needs: [build-windows-server, build-windows-gui, build-linux]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 下载所有构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 整理文件
+        run: |
+          mkdir -p release
+          find artifacts -type f -name "*.exe" -o -name "*-linux" | while read f; do
+            cp "$f" release/
+          done
+          ls -lh release/
+
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "PaddleOCR API ${{ github.ref_name }}"
+          body: |
+            ## PaddleOCR API ${{ github.ref_name }}
+
+            ### 📦 下载
+
+            | 文件 | 说明 |
+            |------|------|
+            | `paddle-ocr-api-版本-windows.exe` | 🪟 Windows 服务端（双击运行） |
+            | `PaddleOCR可视化工具-版本-windows.exe` | 🖼️ Windows GUI 可视化工具 |
+            | `paddle-ocr-api-版本-linux` | 🐧 Linux 服务端（chmod +x 后运行） |
+
+            ### ✅ 新功能
+
+            - OCR 图片文字识别
+            - 关键字查找（模糊/精确匹配）
+            - 批量图片识别
+            - GPU 加速（自动检测）
+            - API Key 认证保护
+            - Base64 接口（易语言友好）
+            - Windows GUI 可视化工具
+
+            ### 🚀 使用
+
+            **Windows 服务端：** 双击 `paddle-ocr-api.exe`，访问 http://localhost:8000/docs
+
+            **Windows 可视化工具：** 双击 `PaddleOCR可视化工具.exe`，连接服务端使用
+
+            **Linux：**
+            ```bash
+            chmod +x paddle-ocr-api-版本-linux
+            ./paddle-ocr-api-版本-linux
+            ```
+          files: release/*
