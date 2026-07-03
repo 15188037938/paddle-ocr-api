@@ -20,6 +20,8 @@ import logging
 from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from paddleocr import PaddleOCR
 
@@ -34,8 +36,90 @@ USE_GPU = os.environ.get("USE_GPU", "").lower() in ("1", "true", "yes")
 # ============================================================
 # 初始化
 # ============================================================
-app = FastAPI(title="PaddleOCR API", version="2.1.0", description="飞桨OCR文字识别接口")
+app = FastAPI(
+    title="PaddleOCR API",
+    version="2.2.0",
+    description="飞桨OCR + ddddocr 文字识别 / 验证码 / 目标检测 / 滑块匹配",
+    docs_url=None,
+    redoc_url=None,
+)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+# ============================================================
+# 自定义中文 Swagger UI
+# ============================================================
+@app.get("/docs", include_in_schema=False)
+async def custom_docs():
+    html = get_swagger_ui_html(
+        openapi_url="/openapi.json",
+        title="PaddleOCR API 文档",
+        swagger_ui_parameters={
+            "displayLang": "zh-cn",
+            "tryItOutEnabled": True,
+            "defaultModelsExpandDepth": 1,
+            "displayRequestDuration": True,
+        },
+    )
+    # get_swagger_ui_html 返回的是 HTMLResponse 对象，需要先取 body
+    html_content = html.body.decode() if hasattr(html, 'body') else str(html)
+    script = """
+    <script>
+    (function() {
+        const dict = {
+            'Parameters': '参数',
+            'Responses': '响应',
+            'Request body': '请求体',
+            'No parameters': '无参数',
+            'Try it out': '试用',
+            'Cancel': '取消',
+            'Execute': '执行',
+            'Clear': '清空',
+            'Required': '必填',
+            'Optional': '选填',
+            'Description': '描述',
+            'Example': '示例',
+            'Value': '值',
+            'Schema': '结构',
+            'Response body': '响应体',
+            'Response headers': '响应头',
+            'Authorizations': '认证',
+            'Loading': '加载中',
+            'Failed to load API definition.': 'API 定义加载失败。',
+            'Available authorizations': '可用认证方式',
+            'string': '字符串',
+            'boolean': '布尔值',
+            'integer': '整数',
+            'number': '数字',
+            'array': '数组',
+            'object': '对象',
+            'file': '文件',
+            'multipart/form-data': '文件上传',
+            'application/json': 'JSON',
+            'true': '是',
+            'false': '否',
+        };
+        function translate(node) {
+            if (node.nodeType === 3) {
+                let t = node.textContent.trim();
+                if (dict[t]) {
+                    node.textContent = node.textContent.replace(t, dict[t]);
+                }
+            } else if (node.nodeType === 1) {
+                if (node.placeholder && dict[node.placeholder]) node.placeholder = dict[node.placeholder];
+                if (node.tagName === 'BUTTON' && dict[node.textContent.trim()]) node.textContent = dict[node.textContent.trim()];
+                if (node.tagName === 'TH' && dict[node.textContent.trim()]) node.textContent = dict[node.textContent.trim()];
+                if (node.tagName === 'SPAN' && node.className && node.className.includes('model') && dict[node.textContent.trim()]) node.textContent = dict[node.textContent.trim()];
+                for (let c of node.childNodes) translate(c);
+            }
+        }
+        translate(document.body);
+        new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => translate(n))))
+            .observe(document.body, { childList: true, subtree: true });
+    })();
+    </script>
+    """
+    return HTMLResponse(content=html_content.replace("</body>", script + "</body>"))
 
 # ----- 认证 -----
 security = HTTPBearer(auto_error=False)
