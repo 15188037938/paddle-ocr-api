@@ -4,8 +4,24 @@ title PaddleOCR API - Windows 一键启动
 
 echo ╔══════════════════════════════════════╗
 echo ║     PaddleOCR API Windows 一键启动   ║
+║      v2.1.0 - GPU + 批量 + 认证        ║
 echo ╚══════════════════════════════════════╝
 echo.
+
+rem ===== 可选：设置 API Key =====
+if "%API_KEY%"=="" (
+    echo [!] 提示：可通过 set API_KEY=your_secret_key 开启认证
+) else (
+    echo [✓] API Key 认证已开启
+)
+
+rem ===== 可选：启用 GPU =====
+if /i "%USE_GPU%"=="true" (
+    echo [✓] GPU 加速模式已启用
+) else if /i "%USE_GPU%"=="1" (
+    set USE_GPU=true
+    echo [✓] GPU 加速模式已启用
+)
 
 rem ===== 1. 检查 Python =====
 echo [*] 检查 Python...
@@ -19,13 +35,19 @@ if %errorlevel% neq 0 (
 )
 for /f "tokens=2" %%i in ('python --version 2^>^&1') do echo [✓] Python: %%i
 
-rem ===== 2. 检查/安装 PaddlePaddle =====
+rem ===== 2. 检查/安装 PaddlePaddle（优先 GPU） =====
 echo [*] 检查 PaddlePaddle...
 python -c "import paddle; print('版本:', paddle.__version__)" 2>nul
 if %errorlevel% neq 0 (
-    echo [!] 未安装，正在自动安装（CPU版，约2-5分钟）...
-    python -m pip install paddlepaddle -q
-    echo [✓] PaddlePaddle 安装完成
+    if /i "%USE_GPU%"=="true" (
+        echo [!] 未安装，正在安装 GPU 版（约3-8分钟）...
+        python -m pip install paddlepaddle-gpu -q
+        echo [✓] PaddlePaddle-GPU 安装完成
+    ) else (
+        echo [!] 未安装，正在自动安装（CPU版，约2-5分钟）...
+        python -m pip install paddlepaddle -q
+        echo [✓] PaddlePaddle 安装完成
+    )
 ) else (
     echo [✓] PaddlePaddle 已安装
 )

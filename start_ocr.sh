@@ -21,9 +21,18 @@ API_FILE="$API_DIR/ocr_api.py"
 
 echo -e "${CYAN}"
 echo "  ╔══════════════════════════════════════╗"
-echo "  ║     PaddleOCR API 一键启动           ║"
+echo "  ║  PaddleOCR API 一键启动 v2.1.0      ║"
+echo "  ║  GPU + 批量 + 认证                  ║"
 echo "  ╚══════════════════════════════════════╝"
 echo -e "${NC}"
+
+# ——— 显示 API Key / GPU 状态 ———
+if [ -n "$API_KEY" ]; then
+    log "API Key 认证已开启"
+fi
+if [ "$USE_GPU" = "true" ] || [ "$USE_GPU" = "1" ]; then
+    log "GPU 加速模式已启用"
+fi
 
 # ——— 1. 检查 Python ———
 log "检查 Python..."
@@ -34,14 +43,20 @@ if [ -z "$PYTHON" ]; then
 fi
 log "Python: $($PYTHON --version)"
 
-# ——— 2. 检查/安装 PaddlePaddle ———
+# ——— 2. 检查/安装 PaddlePaddle（优先 GPU） ———
 log "检查 PaddlePaddle..."
 if $PYTHON -c "import paddle; print(paddle.__version__)" 2>/dev/null; then
     log "PaddlePaddle 已安装"
 else
-    warn "PaddlePaddle 未安装，正在自动安装（CPU版）..."
-    $PYTHON -m pip install paddlepaddle -q
-    log "PaddlePaddle 安装完成"
+    if [ "$USE_GPU" = "true" ] || [ "$USE_GPU" = "1" ]; then
+        warn "未安装，正在安装 GPU 版..."
+        $PYTHON -m pip install paddlepaddle-gpu -q
+        log "PaddlePaddle-GPU 安装完成"
+    else
+        warn "PaddlePaddle 未安装，正在自动安装（CPU版）..."
+        $PYTHON -m pip install paddlepaddle -q
+        log "PaddlePaddle 安装完成"
+    fi
 fi
 
 # ——— 3. 检查/安装 PaddleOCR ———

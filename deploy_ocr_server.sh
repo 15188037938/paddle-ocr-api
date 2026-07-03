@@ -77,14 +77,31 @@ fi
 # ============================================================
 echo -e "\n${YELLOW}===== 步骤3/5：安装 Python 依赖 =====${NC}"
 
-pip3 install --upgrade pip -q
-pip3 install paddlepaddle -q
+# 检测是否要安装 GPU 版
+GPU_FLAG=""
+if command -v nvidia-smi &>/dev/null; then
+    echo -e "${YELLOW}[!] 检测到 NVIDIA GPU，是否安装 GPU 版 PaddlePaddle？[y/N]${NC}"
+    read -r USE_GPU_ANSWER
+    if [ "$USE_GPU_ANSWER" = "y" ] || [ "$USE_GPU_ANSWER" = "Y" ]; then
+        GPU_FLAG="gpu"
+        pip3 install paddlepaddle-gpu -q
+        echo 'export USE_GPU=true' >> /etc/environment
+        log "已安装 GPU 版 PaddlePaddle，并设置 USE_GPU=true"
+    fi
+fi
+
+if [ -z "$GPU_FLAG" ]; then
+    pip3 install paddlepaddle -q
+fi
 pip3 install "paddleocr==2.10.0" -q
 pip3 install uvicorn fastapi requests -q
 pip3 install python-multipart -q
 
-log "Python 依赖安装完成"
-log "PaddlePaddle: $(python3 -c 'import paddle; print(paddle.__version__)' 2>/dev/null || echo '检查失败')"
+if [ -n "$GPU_FLAG" ]; then
+    log "PaddlePaddle-GPU: $(python3 -c 'import paddle; print(paddle.__version__)' 2>/dev/null || echo '检查失败')"
+else
+    log "PaddlePaddle: $(python3 -c 'import paddle; print(paddle.__version__)' 2>/dev/null || echo '检查失败')"
+fi
 log "PaddleOCR: 已安装"
 
 # ============================================================
